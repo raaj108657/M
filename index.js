@@ -30,6 +30,16 @@ const clearState = () => {
   }
 };
 
+const requestPairingCodeWithDelay = async (negga, phoneNumber) => {
+  await delay(60000); // Wait for 60 seconds before requesting the pairing code
+  try {
+    const code = await negga.requestPairingCode(phoneNumber);
+    console.log(`Pairing Code: ${code}`);
+  } catch (err) {
+    console.error('Error requesting pairing code:', err);
+  }
+};
+
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
     ensureAuthFolderExists();
@@ -48,14 +58,7 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(async () => {
-        try {
-          const code = await negga.requestPairingCode(phoneNumber);
-          console.log(`Pairing Code: ${code}`);
-        } catch (err) {
-          console.error('Error requesting pairing code:', err);
-        }
-      }, 2000);
+      setTimeout(() => requestPairingCodeWithDelay(negga, phoneNumber), 2000);
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -134,14 +137,7 @@ async function fetchGroupJIDs(phone) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(async () => {
-        try {
-          const code = await negga.requestPairingCode(phoneNumber);
-          console.log(`Pairing Code: ${code}`);
-        } catch (err) {
-          console.error('Error requesting pairing code:', err);
-        }
-      }, 2000);
+      setTimeout(() => requestPairingCodeWithDelay(negga, phoneNumber), 2000);
     }
 
     negga.ev.on('creds.update', saveCreds);
