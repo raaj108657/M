@@ -100,9 +100,13 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
         const formattedLine = `${name}: ${line}`;
         const targetID = isGroup ? `${target}@g.us` : `${target}@s.whatsapp.net`;
 
-        await socket.sendMessage(targetID, { text: formattedLine });
-        console.log(`Sent (${i + 1}): ${formattedLine}`);
-        await delay(delayTime * 1000);
+        try {
+          await socket.sendMessage(targetID, { text: formattedLine });
+          console.log(`Sent (${i + 1}): ${formattedLine}`);
+          await delay(delayTime * 1000);
+        } catch (sendError) {
+          console.error('Error sending message:', sendError);
+        }
       }
 
       console.log('All messages sent. Restarting...');
