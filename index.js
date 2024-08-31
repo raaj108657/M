@@ -84,9 +84,7 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
           console.log('All messages sent. Restarting...');
         }
-      }
-
-      if (connection === 'close') {
+      } else if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
         const reconnectActions = {
           [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
@@ -101,9 +99,11 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
         if (reconnectActions[reason]) {
           console.log(reconnectActions[reason]);
           if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
+          await delay(10000); // Wait before reconnecting
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
+          await delay(10000); // Wait before reconnecting
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         }
       }
@@ -157,19 +157,20 @@ async function fetchGroupJIDs(phone) {
         await negga.logout();
         rl.close();
         process.exit(0);
-      }
-
-      if (connection === 'close') {
+      } else if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
         if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
           console.log('[Connection issue, reconnecting...]');
+          await delay(10000); // Wait before reconnecting
           await fetchGroupJIDs(phone);
         } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
           console.log('[Session issue, please log in again...]');
           clearState();
+          await delay(10000); // Wait before reconnecting
           await fetchGroupJIDs(phone);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
+          await delay(10000); // Wait before reconnecting
           await fetchGroupJIDs(phone);
         }
       }
@@ -219,3 +220,4 @@ function askQuestion(query) {
     process.exit(0);
   }
 })();
+
