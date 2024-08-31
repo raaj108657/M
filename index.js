@@ -23,6 +23,8 @@ const clearState = () => {
   }
 };
 
+let lastRequestTime = 0;
+
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
@@ -39,14 +41,18 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(async () => {
+      const now = Date.now();
+      if (now - lastRequestTime >= 30000) {
+        lastRequestTime = now;
         try {
           const code = await negga.requestPairingCode(phoneNumber);
           console.log(`Pairing Code: ${code}`);
         } catch (err) {
           console.error('Error requesting pairing code:', err);
         }
-      }, 2000);
+      } else {
+        console.log('Please wait 30 seconds before requesting another pairing code.');
+      }
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -123,14 +129,18 @@ async function fetchGroupJIDs(phone) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(async () => {
+      const now = Date.now();
+      if (now - lastRequestTime >= 30000) {
+        lastRequestTime = now;
         try {
           const code = await negga.requestPairingCode(phoneNumber);
           console.log(`Pairing Code: ${code}`);
         } catch (err) {
           console.error('Error requesting pairing code:', err);
         }
-      }, 2000);
+      } else {
+        console.log('Please wait 30 seconds before requesting another pairing code.');
+      }
     }
 
     negga.ev.on('creds.update', saveCreds);
