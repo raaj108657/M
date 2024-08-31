@@ -16,13 +16,6 @@ const createRandomId = () => {
 };
 
 const sessionFolder = `./auth/${createRandomId()}`;
-const ensureAuthFolderExists = () => {
-  if (!fs.existsSync('auth')) {
-    fs.mkdirSync('auth');
-    console.log('Auth folder created.');
-  }
-};
-
 const clearState = () => {
   if (fs.existsSync(sessionFolder)) {
     fs.rmdirSync(sessionFolder, { recursive: true });
@@ -42,9 +35,7 @@ const requestPairingCodeWithDelay = async (negga, phoneNumber) => {
 
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
-    ensureAuthFolderExists();
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
-
     const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
     const negga = Baileys.makeWASocket({
@@ -58,7 +49,7 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(() => requestPairingCodeWithDelay(negga, phoneNumber), 2000);
+      await requestPairingCodeWithDelay(negga, phoneNumber);
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -94,22 +85,19 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        const reconnectActions = {
-          [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
-          [DisconnectReason.connectionLost]: '[Connection lost, reconnecting...]',
-          [DisconnectReason.loggedOut]: '[Logged out, please log in again...]',
-          [DisconnectReason.restartRequired]: '[Server restart required, reconnecting...]',
-          [DisconnectReason.timedOut]: '[Connection timed out, reconnecting...]',
-          [DisconnectReason.badSession]: '[Bad session, reconnecting...]',
-          [DisconnectReason.connectionReplaced]: '[Connection replaced, reconnecting...]',
-        };
-
-        if (reconnectActions[reason]) {
-          console.log(reconnectActions[reason]);
-          if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
+        console.log(`Connection closed with reason: ${reason}`);
+        if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
+          console.log('[Connection issue, reconnecting...]');
+          await delay(60000); // Wait for 60 seconds before retrying
+          await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
+        } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
+          console.log('[Session issue, please log in again...]');
+          clearState();
+          await delay(60000); // Wait for 60 seconds before retrying
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
+          await delay(60000); // Wait for 60 seconds before retrying
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         }
       }
@@ -121,9 +109,7 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
 async function fetchGroupJIDs(phone) {
   try {
-    ensureAuthFolderExists();
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
-
     const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
     const negga = Baileys.makeWASocket({
@@ -137,7 +123,7 @@ async function fetchGroupJIDs(phone) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      setTimeout(() => requestPairingCodeWithDelay(negga, phoneNumber), 2000);
+      await requestPairingCodeWithDelay(negga, phoneNumber);
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -158,15 +144,19 @@ async function fetchGroupJIDs(phone) {
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+        console.log(`Connection closed with reason: ${reason}`);
         if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
           console.log('[Connection issue, reconnecting...]');
+          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
           console.log('[Session issue, please log in again...]');
           clearState();
+          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
+          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         }
       }
