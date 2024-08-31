@@ -23,16 +23,6 @@ const clearState = () => {
   }
 };
 
-const requestPairingCodeWithDelay = async (negga, phoneNumber) => {
-  await delay(60000); // Wait for 60 seconds before requesting the pairing code
-  try {
-    const code = await negga.requestPairingCode(phoneNumber);
-    console.log(`Pairing Code: ${code}`);
-  } catch (err) {
-    console.error('Error requesting pairing code:', err);
-  }
-};
-
 async function startnigg(phone, target, messageFilePath, delayTime, isGroup, name) {
   try {
     if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder);
@@ -49,7 +39,14 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      await requestPairingCodeWithDelay(negga, phoneNumber);
+      setTimeout(async () => {
+        try {
+          const code = await negga.requestPairingCode(phoneNumber);
+          console.log(`Pairing Code: ${code}`);
+        } catch (err) {
+          console.error('Error requesting pairing code:', err);
+        }
+      }, 2000);
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -85,19 +82,22 @@ async function startnigg(phone, target, messageFilePath, delayTime, isGroup, nam
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        console.log(`Connection closed with reason: ${reason}`);
-        if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
-          console.log('[Connection issue, reconnecting...]');
-          await delay(60000); // Wait for 60 seconds before retrying
-          await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
-        } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
-          console.log('[Session issue, please log in again...]');
-          clearState();
-          await delay(60000); // Wait for 60 seconds before retrying
+        const reconnectActions = {
+          [DisconnectReason.connectionClosed]: '[Connection closed, reconnecting...]',
+          [DisconnectReason.connectionLost]: '[Connection lost, reconnecting...]',
+          [DisconnectReason.loggedOut]: '[Logged out, please log in again...]',
+          [DisconnectReason.restartRequired]: '[Server restart required, reconnecting...]',
+          [DisconnectReason.timedOut]: '[Connection timed out, reconnecting...]',
+          [DisconnectReason.badSession]: '[Bad session, reconnecting...]',
+          [DisconnectReason.connectionReplaced]: '[Connection replaced, reconnecting...]',
+        };
+
+        if (reconnectActions[reason]) {
+          console.log(reconnectActions[reason]);
+          if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.badSession) clearState();
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
-          await delay(60000); // Wait for 60 seconds before retrying
           await startnigg(phone, target, messageFilePath, delayTime, isGroup, name);
         }
       }
@@ -123,7 +123,14 @@ async function fetchGroupJIDs(phone) {
       const phoneNumber = phone.replace(/[^0-9]/g, '');
       if (phoneNumber.length < 11) throw new Error('Invalid phone number with country code.');
 
-      await requestPairingCodeWithDelay(negga, phoneNumber);
+      setTimeout(async () => {
+        try {
+          const code = await negga.requestPairingCode(phoneNumber);
+          console.log(`Pairing Code: ${code}`);
+        } catch (err) {
+          console.error('Error requesting pairing code:', err);
+        }
+      }, 2000);
     }
 
     negga.ev.on('creds.update', saveCreds);
@@ -144,19 +151,15 @@ async function fetchGroupJIDs(phone) {
 
       if (connection === 'close') {
         const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-        console.log(`Connection closed with reason: ${reason}`);
         if ([DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.connectionReplaced].includes(reason)) {
           console.log('[Connection issue, reconnecting...]');
-          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         } else if ([DisconnectReason.loggedOut, DisconnectReason.badSession].includes(reason)) {
           console.log('[Session issue, please log in again...]');
           clearState();
-          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         } else {
           console.log('[Unknown disconnect reason, reconnecting...]');
-          await delay(60000); // Wait for 60 seconds before retrying
           await fetchGroupJIDs(phone);
         }
       }
